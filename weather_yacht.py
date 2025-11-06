@@ -302,6 +302,7 @@ class WeatherYachtApp:
         self.create_frames()
         self.show_frame("start")
         self.schedule_auto_location_detection()
+        self.set_fullscreen(True)
 
     def create_frames(self) -> None:
         self.frames["start"] = tk.Frame(self.root, bg=self.current_theme["bg"])
