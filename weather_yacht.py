@@ -29,6 +29,7 @@ CATEGORIES = [
     ("yacht", "야추"),
     ("chance", "찬스"),
 ]
+CATEGORY_DISPLAY_MAP = {code: display for code, display in CATEGORIES}
 
 WEATHER_THEMES = {
     "sunny": {
@@ -258,8 +259,9 @@ class WeatherYachtApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Weather Yacht")
-        self.root.geometry("950x700")
-        self.root.resizable(False, False)
+        self.root.geometry("1100x820")
+        self.root.minsize(950, 700)
+        self.root.resizable(True, True)
 
         self.frames: dict[str, tk.Frame] = {}
         self.players: list[dict] = []
@@ -632,14 +634,18 @@ class WeatherYachtApp:
         self.score_frame = self.score_inner
 
     def update_player_entries(self) -> None:
-        for entry in self.player_entries:
-            entry.destroy()
+        existing_names = [var.get() for var in self.player_name_vars]
+        for widget in self.names_container.winfo_children():
+            widget.destroy()
         self.player_entries.clear()
         self.player_name_vars.clear()
 
         count = self.player_count_var.get()
         for idx in range(count):
-            var = tk.StringVar(value=f"플레이어 {idx + 1}")
+            default_name = f"플레이어 {idx + 1}"
+            initial_value = existing_names[idx] if idx < len(existing_names) else default_name
+            name_text = initial_value or default_name
+
             label = tk.Label(
                 self.names_container,
                 text=f"플레이어 {idx + 1} 이름:",
@@ -648,6 +654,8 @@ class WeatherYachtApp:
                 fg=self.current_theme["fg"],
             )
             label.grid(row=idx, column=0, padx=10, pady=5, sticky="e")
+
+            var = tk.StringVar(value=name_text)
             entry = tk.Entry(
                 self.names_container,
                 textvariable=var,
@@ -996,6 +1004,7 @@ class WeatherYachtApp:
         for idx, view in enumerate(self.dice_views):
             value = self.dice[idx]
             view.render(value, self.held[idx], self.current_theme["fg"])
+        self.update_category_buttons()
 
     def toggle_hold(self, index: int) -> None:
         if self.dice[index] == 0:
@@ -1004,12 +1013,31 @@ class WeatherYachtApp:
         self.update_dice_display()
 
     def update_category_buttons(self) -> None:
+        if not getattr(self, "category_buttons", None):
+            return
+        if not self.players:
+            return
+
         player = self.players[self.current_player_index]
+        dice_ready = all(value > 0 for value in self.dice)
+        bonus = player.get("pending_bonus", 0)
+
         for code, button in self.category_buttons.items():
+            base_text = CATEGORY_DISPLAY_MAP.get(code, code)
             if code in player["scores"]:
-                button.config(state="disabled")
+                button.config(state="disabled", text=f"{base_text} (기록됨)")
+                continue
+
+            button.config(state="normal")
+            if dice_ready:
+                expected = calculate_score(code, self.dice)
+                total_expected = expected + bonus
+                if bonus:
+                    button.config(text=f"{base_text} (예상 {total_expected}점, 보너스 포함)")
+                else:
+                    button.config(text=f"{base_text} (예상 {expected}점)")
             else:
-                button.config(state="normal")
+                button.config(text=base_text)
 
     def update_ability_button(self) -> None:
         player = self.players[self.current_player_index]
