@@ -29,6 +29,7 @@ CATEGORIES = [
     ("yacht", "야추"),
     ("chance", "찬스"),
 ]
+CATEGORY_DISPLAY_MAP = {code: display for code, display in CATEGORIES}
 
 WEATHER_THEMES = {
     "sunny": {
@@ -258,8 +259,14 @@ class WeatherYachtApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Weather Yacht")
-        self.root.geometry("950x700")
-        self.root.resizable(False, False)
+        self.root.geometry("1100x820")
+        self.root.minsize(950, 700)
+        self.root.resizable(True, True)
+        self.is_fullscreen = False
+        self.window_geometry = self.root.geometry()
+        self.fullscreen_button: tk.Button | None = None
+        self.root.bind("<F11>", self.toggle_fullscreen)
+        self.root.bind("<Escape>", self.exit_fullscreen)
 
         self.frames: dict[str, tk.Frame] = {}
         self.players: list[dict] = []
@@ -295,6 +302,7 @@ class WeatherYachtApp:
         self.create_frames()
         self.show_frame("start")
         self.schedule_auto_location_detection()
+        self.set_fullscreen(True)
 
     def create_frames(self) -> None:
         self.frames["start"] = tk.Frame(self.root, bg=self.current_theme["bg"])
@@ -304,6 +312,39 @@ class WeatherYachtApp:
         self.build_start_frame()
         self.build_setup_frame()
         self.build_game_frame()
+
+    def get_fullscreen_button_label(self) -> str:
+        return "전체화면 해제 (Esc)" if self.is_fullscreen else "전체화면 실행 (F11)"
+
+    def update_fullscreen_button(self) -> None:
+        if self.fullscreen_button is not None:
+            self.fullscreen_button.config(text=self.get_fullscreen_button_label())
+
+    def set_fullscreen(self, enabled: bool) -> None:
+        if enabled == self.is_fullscreen:
+            return
+        if enabled:
+            try:
+                self.window_geometry = self.root.geometry()
+            except Exception:
+                self.window_geometry = "1100x820"
+        self.is_fullscreen = enabled
+        try:
+            self.root.attributes("-fullscreen", enabled)
+        except tk.TclError:
+            if enabled:
+                self.root.state("zoomed")
+            else:
+                self.root.state("normal")
+        if not enabled and self.window_geometry:
+            self.root.geometry(self.window_geometry)
+        self.update_fullscreen_button()
+
+    def toggle_fullscreen(self, event=None) -> None:
+        self.set_fullscreen(not self.is_fullscreen)
+
+    def exit_fullscreen(self, event=None) -> None:
+        self.set_fullscreen(False)
 
     def schedule_auto_location_detection(self) -> None:
         if self._auto_detection_scheduled:
@@ -394,6 +435,21 @@ class WeatherYachtApp:
             command=self.show_rules,
         )
         how_to_btn.pack(pady=10)
+        self.fullscreen_button = tk.Button(
+            frame,
+            text=self.get_fullscreen_button_label(),
+            font=("Helvetica", 14),
+            width=18,
+            command=self.toggle_fullscreen,
+        )
+        self.fullscreen_button.pack(pady=10)
+        tk.Label(
+            frame,
+            text="단축키: F11 전체화면, Esc 전체화면 해제",
+            font=("Helvetica", 12),
+            bg=self.current_theme["bg"],
+            fg=self.current_theme["fg"],
+        ).pack(pady=5)
 
     def build_setup_frame(self) -> None:
         frame = self.frames["setup"]
@@ -632,14 +688,18 @@ class WeatherYachtApp:
         self.score_frame = self.score_inner
 
     def update_player_entries(self) -> None:
-        for entry in self.player_entries:
-            entry.destroy()
+        existing_names = [var.get() for var in self.player_name_vars]
+        for widget in self.names_container.winfo_children():
+            widget.destroy()
         self.player_entries.clear()
         self.player_name_vars.clear()
 
         count = self.player_count_var.get()
         for idx in range(count):
-            var = tk.StringVar(value=f"플레이어 {idx + 1}")
+            default_name = f"플레이어 {idx + 1}"
+            initial_value = existing_names[idx] if idx < len(existing_names) else default_name
+            name_text = initial_value or default_name
+
             label = tk.Label(
                 self.names_container,
                 text=f"플레이어 {idx + 1} 이름:",
@@ -648,6 +708,8 @@ class WeatherYachtApp:
                 fg=self.current_theme["fg"],
             )
             label.grid(row=idx, column=0, padx=10, pady=5, sticky="e")
+
+            var = tk.StringVar(value=name_text)
             entry = tk.Entry(
                 self.names_container,
                 textvariable=var,
@@ -996,6 +1058,7 @@ class WeatherYachtApp:
         for idx, view in enumerate(self.dice_views):
             value = self.dice[idx]
             view.render(value, self.held[idx], self.current_theme["fg"])
+        self.update_category_buttons()
 
     def toggle_hold(self, index: int) -> None:
         if self.dice[index] == 0:
@@ -1004,12 +1067,31 @@ class WeatherYachtApp:
         self.update_dice_display()
 
     def update_category_buttons(self) -> None:
+        if not getattr(self, "category_buttons", None):
+            return
+        if not self.players:
+            return
+
         player = self.players[self.current_player_index]
+        dice_ready = all(value > 0 for value in self.dice)
+        bonus = player.get("pending_bonus", 0)
+
         for code, button in self.category_buttons.items():
+            base_text = CATEGORY_DISPLAY_MAP.get(code, code)
             if code in player["scores"]:
-                button.config(state="disabled")
+                button.config(state="disabled", text=f"{base_text} (기록됨)")
+                continue
+
+            button.config(state="normal")
+            if dice_ready:
+                expected = calculate_score(code, self.dice)
+                total_expected = expected + bonus
+                if bonus:
+                    button.config(text=f"{base_text} (예상 {total_expected}점, 보너스 포함)")
+                else:
+                    button.config(text=f"{base_text} (예상 {expected}점)")
             else:
-                button.config(state="normal")
+                button.config(text=base_text)
 
     def update_ability_button(self) -> None:
         player = self.players[self.current_player_index]
