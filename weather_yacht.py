@@ -267,7 +267,6 @@ class WeatherYachtApp:
         self.fullscreen_button: tk.Button | None = None
         self.root.bind("<F11>", self.toggle_fullscreen)
         self.root.bind("<Escape>", self.exit_fullscreen)
-        self.root.bind_all("<MouseWheel>", self.handle_mousewheel)
 
         self.frames: dict[str, tk.Frame] = {}
         self.players: list[dict] = []
@@ -355,38 +354,22 @@ class WeatherYachtApp:
         if messagebox.askyesno("게임 종료", "게임을 종료하시겠습니까?"):
             self.root.destroy()
 
-    def handle_mousewheel(self, event) -> None:
-        game_frame = self.frames.get("game")
-        if game_frame is None or not game_frame.winfo_ismapped():
+    def _bind_scroll_target(self, widget: tk.Widget | None, canvas: tk.Canvas | None) -> None:
+        if widget is None or canvas is None:
             return
-        try:
-            pointer_widget = self.root.winfo_containing(*self.root.winfo_pointerxy())
-        except Exception:
-            pointer_widget = event.widget
 
-        canvas = self._locate_scroll_canvas(pointer_widget)
-        if canvas is None or not canvas.winfo_exists():
-            return
+        def _on_mousewheel(event) -> str | None:
+            self._scroll_canvas(canvas, event)
+            return "break"
+
+        widget.bind("<MouseWheel>", _on_mousewheel)
+
+    def _scroll_canvas(self, canvas: tk.Canvas, event) -> None:
         try:
             delta = int(-1 * (event.delta / 120))
         except Exception:
             return
         canvas.yview_scroll(delta, "units")
-
-    def _locate_scroll_canvas(self, widget: tk.Widget | None) -> tk.Canvas | None:
-        if widget is None:
-            return None
-        category_canvas = getattr(self, "category_canvas", None)
-        score_canvas = getattr(self, "score_canvas", None)
-
-        current = widget
-        while current is not None:
-            if current is category_canvas:
-                return category_canvas
-            if current is score_canvas:
-                return score_canvas
-            current = getattr(current, "master", None)
-        return None
 
     def schedule_auto_location_detection(self) -> None:
         if self._auto_detection_scheduled:
@@ -702,6 +685,8 @@ class WeatherYachtApp:
         self.category_canvas.configure(yscrollcommand=self.category_scrollbar.set)
         self.category_canvas.pack(side="left", fill="both", expand=True)
         self.category_scrollbar.pack(side="right", fill="y")
+        self._bind_scroll_target(self.category_canvas, self.category_canvas)
+        self._bind_scroll_target(self.category_inner, self.category_canvas)
 
         self.category_buttons: dict[str, tk.Button] = {}
         for idx, (code, display) in enumerate(CATEGORIES):
@@ -740,6 +725,9 @@ class WeatherYachtApp:
         self.score_canvas.configure(yscrollcommand=self.score_scrollbar.set)
         self.score_canvas.pack(side="left", fill="both", expand=True)
         self.score_scrollbar.pack(side="right", fill="y")
+        self._bind_scroll_target(self.score_canvas, self.score_canvas)
+        self._bind_scroll_target(self.score_inner, self.score_canvas)
+        self._bind_scroll_target(self.score_frame, self.score_canvas)
 
         self.score_frame = self.score_inner
 
