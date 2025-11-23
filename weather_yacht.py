@@ -267,6 +267,7 @@ class WeatherYachtApp:
         self.fullscreen_button: tk.Button | None = None
         self.root.bind("<F11>", self.toggle_fullscreen)
         self.root.bind("<Escape>", self.exit_fullscreen)
+        self.root.bind_all("<MouseWheel>", self.handle_game_mousewheel)
 
         self.frames: dict[str, tk.Frame] = {}
         self.players: list[dict] = []
@@ -345,6 +346,27 @@ class WeatherYachtApp:
 
     def exit_fullscreen(self, event=None) -> None:
         self.set_fullscreen(False)
+
+    def return_to_start(self) -> None:
+        if messagebox.askyesno("처음 화면", "진행 중인 게임을 종료하고 처음 화면으로 돌아가시겠습니까?"):
+            self.show_frame("start")
+
+    def confirm_exit(self) -> None:
+        if messagebox.askyesno("게임 종료", "게임을 종료하시겠습니까?"):
+            self.root.destroy()
+
+    def handle_game_mousewheel(self, event) -> None:
+        game_frame = self.frames.get("game")
+        if game_frame is None or not game_frame.winfo_ismapped():
+            return
+        try:
+            delta = int(-1 * (event.delta / 120))
+        except Exception:
+            return
+        for canvas_name in ("category_canvas", "score_canvas"):
+            canvas = getattr(self, canvas_name, None)
+            if canvas is not None and canvas.winfo_exists():
+                canvas.yview_scroll(delta, "units")
 
     def schedule_auto_location_detection(self) -> None:
         if self._auto_detection_scheduled:
@@ -552,6 +574,30 @@ class WeatherYachtApp:
             fg=self.current_theme["fg"],
         )
         weather_label.pack(side="right", padx=20)
+
+        actions = tk.Frame(frame, bg=self.current_theme["bg"])
+        actions.pack(fill="x", padx=20, pady=(0, 10))
+        tk.Button(
+            actions,
+            text="게임 방법",
+            font=("Helvetica", 12),
+            command=self.show_rules,
+            width=12,
+        ).pack(side="left", padx=5)
+        tk.Button(
+            actions,
+            text="처음 화면",
+            font=("Helvetica", 12),
+            command=self.return_to_start,
+            width=12,
+        ).pack(side="left", padx=5)
+        tk.Button(
+            actions,
+            text="게임 종료",
+            font=("Helvetica", 12),
+            command=self.confirm_exit,
+            width=12,
+        ).pack(side="right", padx=5)
 
         dice_section = tk.Frame(frame, bg=self.current_theme["bg"])
         dice_section.pack(pady=20)
