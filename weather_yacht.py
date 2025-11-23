@@ -268,6 +268,7 @@ class WeatherYachtApp:
         self.root.bind("<F11>", self.toggle_fullscreen)
         self.root.bind("<Escape>", self.exit_fullscreen)
         self.root.bind("<MouseWheel>", self.handle_mousewheel)
+        self.root.bind("<Shift-MouseWheel>", self.handle_shift_mousewheel)
 
         self.frames: dict[str, tk.Frame] = {}
         self.players: list[dict] = []
@@ -671,7 +672,7 @@ class WeatherYachtApp:
                 self.category_inner,
                 text=display,
                 font=("Helvetica", 14),
-                width=18,
+                width=22,
                 command=lambda c=code: self.record_score(c),
             )
             btn.grid(row=idx, column=0, padx=10, pady=4, sticky="ew")
@@ -691,6 +692,11 @@ class WeatherYachtApp:
             orient="vertical",
             command=self.score_canvas.yview,
         )
+        self.score_xscrollbar = tk.Scrollbar(
+            self.score_container,
+            orient="horizontal",
+            command=self.score_canvas.xview,
+        )
         self.score_inner = tk.Frame(self.score_canvas, bg=self.current_theme["bg"])
         self.score_inner.bind(
             "<Configure>",
@@ -699,9 +705,13 @@ class WeatherYachtApp:
             ),
         )
         self.score_canvas.create_window((0, 0), window=self.score_inner, anchor="nw")
-        self.score_canvas.configure(yscrollcommand=self.score_scrollbar.set)
+        self.score_canvas.configure(
+            yscrollcommand=self.score_scrollbar.set,
+            xscrollcommand=self.score_xscrollbar.set,
+        )
         self.score_canvas.pack(side="left", fill="both", expand=True)
         self.score_scrollbar.pack(side="right", fill="y")
+        self.score_xscrollbar.pack(side="bottom", fill="x")
 
         self.score_frame = self.score_inner
 
@@ -896,7 +906,7 @@ class WeatherYachtApp:
             font=header_font,
             bg=self.current_theme["bg"],
             fg=self.current_theme["fg"],
-            width=18,
+            width=22,
         ).grid(row=0, column=0, padx=5, pady=5)
 
         self.score_labels = {code: [] for code, _ in CATEGORIES}
@@ -919,7 +929,7 @@ class WeatherYachtApp:
                 font=cell_font,
                 bg=self.current_theme["bg"],
                 fg=self.current_theme["fg"],
-                width=18,
+                width=22,
                 anchor="w",
             ).grid(row=row, column=0, padx=5, pady=3, sticky="w")
             for col in range(len(self.players)):
@@ -943,7 +953,7 @@ class WeatherYachtApp:
             font=header_font,
             bg=self.current_theme["bg"],
             fg=self.current_theme["fg"],
-            width=18,
+            width=22,
         ).grid(row=total_row, column=0, padx=5, pady=5)
 
         for col in range(len(self.players)):
@@ -1117,6 +1127,24 @@ class WeatherYachtApp:
             or self._widget_is_within(widget, score_canvas)
         ):
             score_canvas.yview_scroll(steps, "units")
+            return "break"
+
+        return None
+
+    def handle_shift_mousewheel(self, event) -> str | None:
+        delta = getattr(event, "delta", 0)
+        if delta == 0:
+            return None
+        steps = int(-1 * (delta / 120)) or (-1 if delta > 0 else 1)
+        widget = getattr(event, "widget", None)
+
+        score_canvas = getattr(self, "score_canvas", None)
+        score_inner = getattr(self, "score_inner", None)
+        if score_canvas and (
+            self._widget_is_within(widget, score_inner)
+            or self._widget_is_within(widget, score_canvas)
+        ):
+            score_canvas.xview_scroll(steps, "units")
             return "break"
 
         return None
@@ -1366,7 +1394,6 @@ class WeatherYachtApp:
     def show_rules(self) -> None:
         rules = tk.Toplevel(self.root)
         rules.title("게임 방법")
-        rules.geometry("520x600")
         rules.resizable(False, False)
 
         text = (
@@ -1403,10 +1430,26 @@ class WeatherYachtApp:
             rules,
             wrap="word",
             font=("Helvetica", 12),
+            height=10,
         )
         text_widget.pack(fill="both", expand=True, padx=15, pady=10)
         text_widget.insert("1.0", text)
         text_widget.config(state="disabled")
+
+        try:
+            lines = int(text_widget.index("end-1c").split(".")[0])
+            text_widget.config(height=min(lines + 2, 80))
+            text_widget.update_idletasks()
+
+            req_w = text_widget.winfo_reqwidth() + 30
+            req_h = text_widget.winfo_reqheight() + 120
+            screen_w = rules.winfo_screenwidth()
+            screen_h = rules.winfo_screenheight()
+            width = min(max(req_w, 520), screen_w - 80)
+            height = min(max(req_h, 420), screen_h - 120)
+            rules.geometry(f"{int(width)}x{int(height)}")
+        except Exception:
+            rules.geometry("520x650")
 
         tk.Button(
             rules,
