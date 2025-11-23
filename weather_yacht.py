@@ -267,6 +267,7 @@ class WeatherYachtApp:
         self.fullscreen_button: tk.Button | None = None
         self.root.bind("<F11>", self.toggle_fullscreen)
         self.root.bind("<Escape>", self.exit_fullscreen)
+        self.root.bind("<MouseWheel>", self.handle_mousewheel)
 
         self.frames: dict[str, tk.Frame] = {}
         self.players: list[dict] = []
@@ -606,6 +607,33 @@ class WeatherYachtApp:
         )
         self.status_label.pack(pady=10)
 
+        nav_frame = tk.Frame(frame, bg=self.current_theme["bg"])
+        nav_frame.pack(pady=(0, 15))
+
+        tk.Button(
+            nav_frame,
+            text="게임 방법 다시보기",
+            font=("Helvetica", 13),
+            width=18,
+            command=self.show_rules,
+        ).grid(row=0, column=0, padx=8)
+
+        tk.Button(
+            nav_frame,
+            text="처음 화면으로",
+            font=("Helvetica", 13),
+            width=14,
+            command=self.confirm_return_to_start,
+        ).grid(row=0, column=1, padx=8)
+
+        tk.Button(
+            nav_frame,
+            text="게임 종료",
+            font=("Helvetica", 13),
+            width=12,
+            command=self.confirm_exit_game,
+        ).grid(row=0, column=2, padx=8)
+
         self.category_frame = tk.LabelFrame(
             frame,
             text="카테고리 선택",
@@ -636,11 +664,6 @@ class WeatherYachtApp:
         self.category_canvas.configure(yscrollcommand=self.category_scrollbar.set)
         self.category_canvas.pack(side="left", fill="both", expand=True)
         self.category_scrollbar.pack(side="right", fill="y")
-
-        def _on_mousewheel(event):
-            self.category_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        self.category_canvas.bind("<MouseWheel>", _on_mousewheel)
 
         self.category_buttons: dict[str, tk.Button] = {}
         for idx, (code, display) in enumerate(CATEGORIES):
@@ -679,11 +702,6 @@ class WeatherYachtApp:
         self.score_canvas.configure(yscrollcommand=self.score_scrollbar.set)
         self.score_canvas.pack(side="left", fill="both", expand=True)
         self.score_scrollbar.pack(side="right", fill="y")
-
-        def _score_mousewheel(event):
-            self.score_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        self.score_canvas.bind("<MouseWheel>", _score_mousewheel)
 
         self.score_frame = self.score_inner
 
@@ -1066,6 +1084,43 @@ class WeatherYachtApp:
         self.held[index] = not self.held[index]
         self.update_dice_display()
 
+    def _widget_is_within(self, widget, container) -> bool:
+        if widget is None or container is None:
+            return False
+        current = widget
+        while current is not None:
+            if current == container:
+                return True
+            current = getattr(current, "master", None)
+        return False
+
+    def handle_mousewheel(self, event) -> str | None:
+        delta = getattr(event, "delta", 0)
+        if delta == 0:
+            return None
+        steps = int(-1 * (delta / 120)) or (-1 if delta > 0 else 1)
+        widget = getattr(event, "widget", None)
+
+        category_canvas = getattr(self, "category_canvas", None)
+        category_inner = getattr(self, "category_inner", None)
+        if category_canvas and (
+            self._widget_is_within(widget, category_inner)
+            or self._widget_is_within(widget, category_canvas)
+        ):
+            category_canvas.yview_scroll(steps, "units")
+            return "break"
+
+        score_canvas = getattr(self, "score_canvas", None)
+        score_inner = getattr(self, "score_inner", None)
+        if score_canvas and (
+            self._widget_is_within(widget, score_inner)
+            or self._widget_is_within(widget, score_canvas)
+        ):
+            score_canvas.yview_scroll(steps, "units")
+            return "break"
+
+        return None
+
     def update_category_buttons(self) -> None:
         if not getattr(self, "category_buttons", None):
             return
@@ -1094,6 +1149,17 @@ class WeatherYachtApp:
                 button.config(text=base_text)
 
     def update_ability_button(self) -> None:
+        if not hasattr(self, "ability_button"):
+            return
+        if not self.players:
+            theme = self.current_theme
+            self.ability_button.config(
+                text=f"{theme['ability_name']} 사용",
+                state="disabled",
+            )
+            self.status_var.set("")
+            return
+
         player = self.players[self.current_player_index]
         theme = self.current_theme
         desc = theme["ability_desc"]
@@ -1282,6 +1348,20 @@ class WeatherYachtApp:
             self.start_turn()
         else:
             self.show_frame("start")
+
+    def confirm_return_to_start(self) -> None:
+        if not messagebox.askyesno(
+            "처음 화면으로",
+            "현재 진행 중인 게임을 중단하고 처음 화면으로 돌아가시겠습니까?",
+        ):
+            return
+        self.players.clear()
+        self.reset_game_state()
+        self.show_frame("start")
+
+    def confirm_exit_game(self) -> None:
+        if messagebox.askyesno("게임 종료", "Weather Yacht을 종료하시겠습니까?"):
+            self.root.destroy()
 
     def show_rules(self) -> None:
         rules = tk.Toplevel(self.root)
