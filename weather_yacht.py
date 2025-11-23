@@ -359,7 +359,12 @@ class WeatherYachtApp:
         game_frame = self.frames.get("game")
         if game_frame is None or not game_frame.winfo_ismapped():
             return
-        canvas = self._locate_scroll_canvas(event.widget)
+        try:
+            pointer_widget = self.root.winfo_containing(*self.root.winfo_pointerxy())
+        except Exception:
+            pointer_widget = event.widget
+
+        canvas = self._locate_scroll_canvas(pointer_widget)
         if canvas is None or not canvas.winfo_exists():
             return
         try:
