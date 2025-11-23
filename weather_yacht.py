@@ -267,7 +267,6 @@ class WeatherYachtApp:
         self.fullscreen_button: tk.Button | None = None
         self.root.bind("<F11>", self.toggle_fullscreen)
         self.root.bind("<Escape>", self.exit_fullscreen)
-        self._active_scroll_canvas: tk.Canvas | None = None
         self.root.bind_all("<MouseWheel>", self.handle_mousewheel)
 
         self.frames: dict[str, tk.Frame] = {}
@@ -360,35 +359,29 @@ class WeatherYachtApp:
         game_frame = self.frames.get("game")
         if game_frame is None or not game_frame.winfo_ismapped():
             return
-        canvas = self._active_scroll_canvas
+        canvas = self._locate_scroll_canvas(event.widget)
         if canvas is None or not canvas.winfo_exists():
             return
-        self._scroll_canvas(canvas, event)
-
-    def _scroll_canvas(self, canvas: tk.Canvas, event) -> None:
         try:
             delta = int(-1 * (event.delta / 120))
         except Exception:
             return
         canvas.yview_scroll(delta, "units")
 
-    def _register_scroll_target(self, widget: tk.Widget, canvas: tk.Canvas | None) -> None:
-        if canvas is None or widget is None:
-            return
+    def _locate_scroll_canvas(self, widget: tk.Widget | None) -> tk.Canvas | None:
+        if widget is None:
+            return None
+        category_canvas = getattr(self, "category_canvas", None)
+        score_canvas = getattr(self, "score_canvas", None)
 
-        def _enter(_event) -> None:
-            self._active_scroll_canvas = canvas
-
-        def _leave(_event) -> None:
-            if self._active_scroll_canvas is canvas:
-                self._active_scroll_canvas = None
-
-        widget.bind("<Enter>", _enter)
-        widget.bind("<Leave>", _leave)
-        widget.bind(
-            "<MouseWheel>",
-            lambda event, target_canvas=canvas: self._scroll_canvas(target_canvas, event),
-        )
+        current = widget
+        while current is not None:
+            if current is category_canvas:
+                return category_canvas
+            if current is score_canvas:
+                return score_canvas
+            current = getattr(current, "master", None)
+        return None
 
     def schedule_auto_location_detection(self) -> None:
         if self._auto_detection_scheduled:
@@ -705,9 +698,6 @@ class WeatherYachtApp:
         self.category_canvas.pack(side="left", fill="both", expand=True)
         self.category_scrollbar.pack(side="right", fill="y")
 
-        for widget in (self.category_canvas, self.category_inner):
-            self._register_scroll_target(widget, self.category_canvas)
-
         self.category_buttons: dict[str, tk.Button] = {}
         for idx, (code, display) in enumerate(CATEGORIES):
             btn = tk.Button(
@@ -719,7 +709,6 @@ class WeatherYachtApp:
             )
             btn.grid(row=idx, column=0, padx=10, pady=4, sticky="ew")
             self.category_buttons[code] = btn
-            self._register_scroll_target(btn, self.category_canvas)
 
         self.score_container = tk.Frame(frame, bg=self.current_theme["bg"])
         self.score_container.pack(side="right", fill="both", expand=True, padx=20, pady=10)
@@ -746,9 +735,6 @@ class WeatherYachtApp:
         self.score_canvas.configure(yscrollcommand=self.score_scrollbar.set)
         self.score_canvas.pack(side="left", fill="both", expand=True)
         self.score_scrollbar.pack(side="right", fill="y")
-
-        for widget in (self.score_canvas, self.score_inner):
-            self._register_scroll_target(widget, self.score_canvas)
 
         self.score_frame = self.score_inner
 
@@ -946,7 +932,6 @@ class WeatherYachtApp:
             width=18,
         )
         category_header.grid(row=0, column=0, padx=5, pady=5)
-        self._register_scroll_target(category_header, self.score_canvas)
 
         self.score_labels = {code: [] for code, _ in CATEGORIES}
         self.total_labels = []
@@ -961,7 +946,6 @@ class WeatherYachtApp:
                 width=12,
             )
             player_label.grid(row=0, column=col, padx=5, pady=5)
-            self._register_scroll_target(player_label, self.score_canvas)
 
         for row, (code, display) in enumerate(CATEGORIES, start=1):
             label = tk.Label(
@@ -974,7 +958,6 @@ class WeatherYachtApp:
                 anchor="w",
             )
             label.grid(row=row, column=0, padx=5, pady=3, sticky="w")
-            self._register_scroll_target(label, self.score_canvas)
             for col in range(len(self.players)):
                 lbl = tk.Label(
                     self.score_frame,
@@ -988,7 +971,6 @@ class WeatherYachtApp:
                 )
                 lbl.grid(row=row, column=col + 1, padx=3, pady=3)
                 self.score_labels[code].append(lbl)
-                self._register_scroll_target(lbl, self.score_canvas)
 
         total_row = len(CATEGORIES) + 1
         total_label = tk.Label(
@@ -1000,7 +982,6 @@ class WeatherYachtApp:
             width=18,
         )
         total_label.grid(row=total_row, column=0, padx=5, pady=5)
-        self._register_scroll_target(total_label, self.score_canvas)
 
         for col in range(len(self.players)):
             lbl = tk.Label(
@@ -1013,7 +994,6 @@ class WeatherYachtApp:
             )
             lbl.grid(row=total_row, column=col + 1, padx=5, pady=5)
             self.total_labels.append(lbl)
-            self._register_scroll_target(lbl, self.score_canvas)
 
         self.score_frame.update_idletasks()
         if hasattr(self, "score_canvas"):
