@@ -267,6 +267,7 @@ class WeatherYachtApp:
         self.fullscreen_button: tk.Button | None = None
         self.root.bind("<F11>", self.toggle_fullscreen)
         self.root.bind("<Escape>", self.exit_fullscreen)
+        self.root.protocol("WM_DELETE_WINDOW", self.confirm_exit)
 
         self.frames: dict[str, tk.Frame] = {}
         self.players: list[dict] = []
@@ -299,6 +300,7 @@ class WeatherYachtApp:
         self._auto_detection_in_progress = False
         self._auto_detection_scheduled = False
 
+        self.create_menus()
         self.create_frames()
         self.show_frame("start")
         self.schedule_auto_location_detection()
@@ -312,6 +314,18 @@ class WeatherYachtApp:
         self.build_start_frame()
         self.build_setup_frame()
         self.build_game_frame()
+        self.update_fullscreen_button()
+
+    def create_menus(self) -> None:
+        menubar = tk.Menu(self.root)
+        game_menu = tk.Menu(menubar, tearoff=0)
+        game_menu.add_command(label="게임 방법", command=self.show_rules)
+        game_menu.add_command(label="처음 화면으로", command=self.return_to_start)
+        game_menu.add_separator()
+        game_menu.add_command(label="게임 종료", command=self.confirm_exit)
+        menubar.add_cascade(label="게임", menu=game_menu)
+        self.root.config(menu=menubar)
+        self.menubar = menubar
 
     def get_fullscreen_button_label(self) -> str:
         return "전체화면 해제 (Esc)" if self.is_fullscreen else "전체화면 실행 (F11)"
@@ -347,11 +361,20 @@ class WeatherYachtApp:
         self.set_fullscreen(False)
 
     def return_to_start(self) -> None:
-        if messagebox.askyesno("처음 화면", "진행 중인 게임을 종료하고 처음 화면으로 돌아가시겠습니까?"):
+        if messagebox.askyesno(
+            "처음 화면",
+            "진행 중인 게임을 종료하고 처음 화면으로 돌아가시겠습니까?",
+            parent=self.root,
+        ):
+            self.reset_game_state()
             self.show_frame("start")
 
     def confirm_exit(self) -> None:
-        if messagebox.askyesno("게임 종료", "게임을 종료하시겠습니까?"):
+        if messagebox.askyesno(
+            "게임 종료",
+            "게임을 종료하시겠습니까?",
+            parent=self.root,
+        ):
             self.root.destroy()
 
     def _bind_scroll_target(self, widget: tk.Widget | None, canvas: tk.Canvas | None) -> None:
