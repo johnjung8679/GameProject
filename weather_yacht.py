@@ -654,6 +654,11 @@ class WeatherYachtApp:
             orient="vertical",
             command=self.category_canvas.yview,
         )
+        self.category_xscrollbar = tk.Scrollbar(
+            self.category_frame,
+            orient="horizontal",
+            command=self.category_canvas.xview,
+        )
         self.category_inner = tk.Frame(self.category_canvas)
         self.category_inner.bind(
             "<Configure>",
@@ -662,9 +667,13 @@ class WeatherYachtApp:
             ),
         )
         self.category_canvas.create_window((0, 0), window=self.category_inner, anchor="nw")
-        self.category_canvas.configure(yscrollcommand=self.category_scrollbar.set)
+        self.category_canvas.configure(
+            yscrollcommand=self.category_scrollbar.set,
+            xscrollcommand=self.category_xscrollbar.set,
+        )
         self.category_canvas.pack(side="left", fill="both", expand=True)
         self.category_scrollbar.pack(side="right", fill="y")
+        self.category_xscrollbar.pack(side="bottom", fill="x")
 
         self.category_buttons: dict[str, tk.Button] = {}
         for idx, (code, display) in enumerate(CATEGORIES):
@@ -1137,6 +1146,15 @@ class WeatherYachtApp:
             return None
         steps = int(-1 * (delta / 120)) or (-1 if delta > 0 else 1)
         widget = getattr(event, "widget", None)
+
+        category_canvas = getattr(self, "category_canvas", None)
+        category_inner = getattr(self, "category_inner", None)
+        if category_canvas and (
+            self._widget_is_within(widget, category_inner)
+            or self._widget_is_within(widget, category_canvas)
+        ):
+            category_canvas.xview_scroll(steps, "units")
+            return "break"
 
         score_canvas = getattr(self, "score_canvas", None)
         score_inner = getattr(self, "score_inner", None)
