@@ -267,7 +267,8 @@ class WeatherYachtApp:
         self.fullscreen_button: tk.Button | None = None
         self.root.bind("<F11>", self.toggle_fullscreen)
         self.root.bind("<Escape>", self.exit_fullscreen)
-        self.root.bind_all("<MouseWheel>", self.handle_game_mousewheel)
+        self._active_scroll_canvas: tk.Canvas | None = None
+        self.root.bind_all("<MouseWheel>", self.handle_mousewheel)
 
         self.frames: dict[str, tk.Frame] = {}
         self.players: list[dict] = []
@@ -355,18 +356,18 @@ class WeatherYachtApp:
         if messagebox.askyesno("게임 종료", "게임을 종료하시겠습니까?"):
             self.root.destroy()
 
-    def handle_game_mousewheel(self, event) -> None:
+    def handle_mousewheel(self, event) -> None:
         game_frame = self.frames.get("game")
         if game_frame is None or not game_frame.winfo_ismapped():
+            return
+        canvas = self._active_scroll_canvas
+        if canvas is None or not canvas.winfo_exists():
             return
         try:
             delta = int(-1 * (event.delta / 120))
         except Exception:
             return
-        for canvas_name in ("category_canvas", "score_canvas"):
-            canvas = getattr(self, canvas_name, None)
-            if canvas is not None and canvas.winfo_exists():
-                canvas.yview_scroll(delta, "units")
+        canvas.yview_scroll(delta, "units")
 
     def schedule_auto_location_detection(self) -> None:
         if self._auto_detection_scheduled:
@@ -687,6 +688,15 @@ class WeatherYachtApp:
             self.category_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
         self.category_canvas.bind("<MouseWheel>", _on_mousewheel)
+        self.category_inner.bind("<MouseWheel>", _on_mousewheel)
+        def _category_enter(_event):
+            self._active_scroll_canvas = self.category_canvas
+        def _category_leave(_event):
+            if self._active_scroll_canvas is self.category_canvas:
+                self._active_scroll_canvas = None
+        for widget in (self.category_canvas, self.category_inner):
+            widget.bind("<Enter>", _category_enter)
+            widget.bind("<Leave>", _category_leave)
 
         self.category_buttons: dict[str, tk.Button] = {}
         for idx, (code, display) in enumerate(CATEGORIES):
@@ -730,6 +740,15 @@ class WeatherYachtApp:
             self.score_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
         self.score_canvas.bind("<MouseWheel>", _score_mousewheel)
+        self.score_inner.bind("<MouseWheel>", _score_mousewheel)
+        def _score_enter(_event):
+            self._active_scroll_canvas = self.score_canvas
+        def _score_leave(_event):
+            if self._active_scroll_canvas is self.score_canvas:
+                self._active_scroll_canvas = None
+        for widget in (self.score_canvas, self.score_inner):
+            widget.bind("<Enter>", _score_enter)
+            widget.bind("<Leave>", _score_leave)
 
         self.score_frame = self.score_inner
 
