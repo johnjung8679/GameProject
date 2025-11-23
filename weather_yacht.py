@@ -267,7 +267,6 @@ class WeatherYachtApp:
         self.fullscreen_button: tk.Button | None = None
         self.root.bind("<F11>", self.toggle_fullscreen)
         self.root.bind("<Escape>", self.exit_fullscreen)
-        self.root.protocol("WM_DELETE_WINDOW", self.confirm_exit)
 
         self.frames: dict[str, tk.Frame] = {}
         self.players: list[dict] = []
@@ -300,7 +299,6 @@ class WeatherYachtApp:
         self._auto_detection_in_progress = False
         self._auto_detection_scheduled = False
 
-        self.create_menus()
         self.create_frames()
         self.show_frame("start")
         self.schedule_auto_location_detection()
@@ -314,18 +312,6 @@ class WeatherYachtApp:
         self.build_start_frame()
         self.build_setup_frame()
         self.build_game_frame()
-        self.update_fullscreen_button()
-
-    def create_menus(self) -> None:
-        menubar = tk.Menu(self.root)
-        game_menu = tk.Menu(menubar, tearoff=0)
-        game_menu.add_command(label="게임 방법", command=self.show_rules)
-        game_menu.add_command(label="처음 화면으로", command=self.return_to_start)
-        game_menu.add_separator()
-        game_menu.add_command(label="게임 종료", command=self.confirm_exit)
-        menubar.add_cascade(label="게임", menu=game_menu)
-        self.root.config(menu=menubar)
-        self.menubar = menubar
 
     def get_fullscreen_button_label(self) -> str:
         return "전체화면 해제 (Esc)" if self.is_fullscreen else "전체화면 실행 (F11)"
@@ -359,40 +345,6 @@ class WeatherYachtApp:
 
     def exit_fullscreen(self, event=None) -> None:
         self.set_fullscreen(False)
-
-    def return_to_start(self) -> None:
-        if messagebox.askyesno(
-            "처음 화면",
-            "진행 중인 게임을 종료하고 처음 화면으로 돌아가시겠습니까?",
-            parent=self.root,
-        ):
-            self.reset_game_state()
-            self.show_frame("start")
-
-    def confirm_exit(self) -> None:
-        if messagebox.askyesno(
-            "게임 종료",
-            "게임을 종료하시겠습니까?",
-            parent=self.root,
-        ):
-            self.root.destroy()
-
-    def _bind_scroll_target(self, widget: tk.Widget | None, canvas: tk.Canvas | None) -> None:
-        if widget is None or canvas is None:
-            return
-
-        def _on_mousewheel(event) -> str | None:
-            self._scroll_canvas(canvas, event)
-            return "break"
-
-        widget.bind("<MouseWheel>", _on_mousewheel)
-
-    def _scroll_canvas(self, canvas: tk.Canvas, event) -> None:
-        try:
-            delta = int(-1 * (event.delta / 120))
-        except Exception:
-            return
-        canvas.yview_scroll(delta, "units")
 
     def schedule_auto_location_detection(self) -> None:
         if self._auto_detection_scheduled:
@@ -601,30 +553,6 @@ class WeatherYachtApp:
         )
         weather_label.pack(side="right", padx=20)
 
-        actions = tk.Frame(frame, bg=self.current_theme["bg"])
-        actions.pack(fill="x", padx=20, pady=(0, 10))
-        tk.Button(
-            actions,
-            text="게임 방법",
-            font=("Helvetica", 12),
-            command=self.show_rules,
-            width=12,
-        ).pack(side="left", padx=5)
-        tk.Button(
-            actions,
-            text="처음 화면",
-            font=("Helvetica", 12),
-            command=self.return_to_start,
-            width=12,
-        ).pack(side="left", padx=5)
-        tk.Button(
-            actions,
-            text="게임 종료",
-            font=("Helvetica", 12),
-            command=self.confirm_exit,
-            width=12,
-        ).pack(side="right", padx=5)
-
         dice_section = tk.Frame(frame, bg=self.current_theme["bg"])
         dice_section.pack(pady=20)
 
@@ -708,8 +636,11 @@ class WeatherYachtApp:
         self.category_canvas.configure(yscrollcommand=self.category_scrollbar.set)
         self.category_canvas.pack(side="left", fill="both", expand=True)
         self.category_scrollbar.pack(side="right", fill="y")
-        self._bind_scroll_target(self.category_canvas, self.category_canvas)
-        self._bind_scroll_target(self.category_inner, self.category_canvas)
+
+        def _on_mousewheel(event):
+            self.category_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        self.category_canvas.bind("<MouseWheel>", _on_mousewheel)
 
         self.category_buttons: dict[str, tk.Button] = {}
         for idx, (code, display) in enumerate(CATEGORIES):
@@ -748,9 +679,11 @@ class WeatherYachtApp:
         self.score_canvas.configure(yscrollcommand=self.score_scrollbar.set)
         self.score_canvas.pack(side="left", fill="both", expand=True)
         self.score_scrollbar.pack(side="right", fill="y")
-        self._bind_scroll_target(self.score_canvas, self.score_canvas)
-        self._bind_scroll_target(self.score_inner, self.score_canvas)
-        self._bind_scroll_target(self.score_frame, self.score_canvas)
+
+        def _score_mousewheel(event):
+            self.score_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        self.score_canvas.bind("<MouseWheel>", _score_mousewheel)
 
         self.score_frame = self.score_inner
 
@@ -939,32 +872,30 @@ class WeatherYachtApp:
         header_font = ("Helvetica", 16, "bold")
         cell_font = ("Helvetica", 14)
 
-        category_header = tk.Label(
+        tk.Label(
             self.score_frame,
             text="카테고리",
             font=header_font,
             bg=self.current_theme["bg"],
             fg=self.current_theme["fg"],
             width=18,
-        )
-        category_header.grid(row=0, column=0, padx=5, pady=5)
+        ).grid(row=0, column=0, padx=5, pady=5)
 
         self.score_labels = {code: [] for code, _ in CATEGORIES}
         self.total_labels = []
 
         for col, player in enumerate(self.players, start=1):
-            player_label = tk.Label(
+            tk.Label(
                 self.score_frame,
                 text=player["name"],
                 font=header_font,
                 bg=self.current_theme["bg"],
                 fg=self.current_theme["fg"],
                 width=12,
-            )
-            player_label.grid(row=0, column=col, padx=5, pady=5)
+            ).grid(row=0, column=col, padx=5, pady=5)
 
         for row, (code, display) in enumerate(CATEGORIES, start=1):
-            label = tk.Label(
+            tk.Label(
                 self.score_frame,
                 text=display,
                 font=cell_font,
@@ -972,8 +903,7 @@ class WeatherYachtApp:
                 fg=self.current_theme["fg"],
                 width=18,
                 anchor="w",
-            )
-            label.grid(row=row, column=0, padx=5, pady=3, sticky="w")
+            ).grid(row=row, column=0, padx=5, pady=3, sticky="w")
             for col in range(len(self.players)):
                 lbl = tk.Label(
                     self.score_frame,
@@ -989,15 +919,14 @@ class WeatherYachtApp:
                 self.score_labels[code].append(lbl)
 
         total_row = len(CATEGORIES) + 1
-        total_label = tk.Label(
+        tk.Label(
             self.score_frame,
             text="총점",
             font=header_font,
             bg=self.current_theme["bg"],
             fg=self.current_theme["fg"],
             width=18,
-        )
-        total_label.grid(row=total_row, column=0, padx=5, pady=5)
+        ).grid(row=total_row, column=0, padx=5, pady=5)
 
         for col in range(len(self.players)):
             lbl = tk.Label(
